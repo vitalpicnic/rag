@@ -1,0 +1,13 @@
+# Direct dependencies for bot, indexing, offline charts and evaluation CLI.
+# Transitive dependencies are resolved by pip; this is not a complete lockfile.
+aiogram==3.25.0
+langchain-core==1.2.14
+langchain-community==0.4.1
+langchain-google-genai==4.2.1
+langchain-text-splitters==1.1.1
+google-genai==1.64.0
+faiss-cpu==1.13.2
+pypdf==6.7.1
+python-dotenv==1.2.1
+numpy==2.4.2
+matplotlib==3.10.8

@@ -59,6 +59,27 @@ class IndexTests(unittest.TestCase):
         self.assertEqual(index.similarity_search('alpha')[0].metadata['source'],
                          str(self.data / 'a.txt'))
 
+    def test_registry_is_applied_live_with_roles_without_reembedding(self):
+        import hashlib
+        self.build()
+        calls = self.embeddings.calls
+        retriever = IndexRetriever(self.root, 'topic', self.embeddings, self.settings)
+        self.assertEqual(retriever.invoke('alpha')[0].metadata['source_kind'], 'unknown')
+        entry = {'kind': 'official_report', 'sha256': hashlib.sha256((self.data / 'a.txt').read_bytes()).hexdigest(),
+                 'url': 'https://bank.example/report', 'title': 'Официальный отчёт'}
+        registry = self.data / 'sources.json'
+        registry.write_text(json.dumps({'a.txt': entry}), encoding='utf-8')
+        with patch.object(retriever._store, 'similarity_search_with_score',
+                          wraps=retriever._store.similarity_search_with_score) as search:
+            docs = retriever.invoke('alpha', config={'metadata': {'retrieval_mode': 'executive'}})
+            self.assertEqual(search.call_args.kwargs['k'], 32)
+        self.assertEqual(docs[0].metadata['source_kind'], 'official_report')
+        self.assertEqual(docs[0].metadata['title'], 'Официальный отчёт')
+        self.assertEqual(self.embeddings.calls, calls)
+        entry['sha256'] = 'b' * 64
+        registry.write_text(json.dumps({'a.txt': entry}), encoding='utf-8')
+        self.assertEqual(retriever.invoke('alpha')[0].metadata['source_kind'], 'unknown')
+
     def test_added_modified_and_deleted_files_invalidate_and_rebuild(self):
         self.build()
         (self.data / 'b.txt').write_text('beta information', encoding='utf-8')

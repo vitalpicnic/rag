@@ -13,6 +13,7 @@ sys.path[:0] = [str(ROOT / '.runtime_deps'), str(ROOT / '.test_deps')]
 with patch.dict(os.environ, {}, clear=True):
     import bot
 from rag.bot_support import SerialWorker
+from langchain_core.documents import Document
 
 
 class Chain:
@@ -60,6 +61,35 @@ class BotTests(unittest.IsolatedAsyncioTestCase):
         msg = message('overview question')
         await bot.handle_chat(msg)
         self.assertEqual(self.chain.calls[0]['mode'], 'overview')
+
+    async def test_analytical_modes_and_pptx_do_not_regenerate_answer(self):
+        await bot.choose_mode(message('🔬 Эксперт'))
+        def respond(inputs, config):
+            self.chain.calls.append(inputs)
+            return {'answer': '42 [S1]', 'sources': [Document(page_content='42', metadata={'source': 'a.pdf'})],
+                    'mode': inputs['mode'], 'question': inputs['input'], 'request_id': inputs['request_id']}
+        self.chain.invoke = respond
+        msg = message('Активы?')
+        await bot.handle_chat(msg)
+        self.assertEqual(self.chain.calls[0]['mode'], 'expert')
+        keyboard = msg.answer.call_args.kwargs['reply_markup']
+        button = next(b for row in keyboard.inline_keyboard for b in row if b.callback_data.startswith('getpptx:'))
+        callback = SimpleNamespace(data=button.callback_data, from_user=msg.from_user,
+                                   message=SimpleNamespace(chat=msg.chat, answer=AsyncMock(), answer_document=AsyncMock()),
+                                   answer=AsyncMock())
+        with patch('bot.export_answer_pptx', return_value=b'pptx') as export:
+            await bot.send_answer_pptx(callback)
+            self.assertEqual(export.call_count, 1)
+        self.assertEqual(len(self.chain.calls), 1)
+        callback.message.answer_document.assert_awaited_once()
+        callback.message.answer_document.reset_mock()
+        callback.from_user = SimpleNamespace(id=2)
+        await bot.send_answer_pptx(callback)
+        callback.message.answer_document.assert_not_awaited()
+        callback.from_user = msg.from_user
+        await bot.clear_history(message('🧹 Очистить чат'))
+        await bot.send_answer_pptx(callback)
+        callback.message.answer_document.assert_not_awaited()
 
     async def test_unsupported_graph_does_not_call_model(self):
         await bot.choose_mode(message('📊 График'))

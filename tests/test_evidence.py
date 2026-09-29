@@ -49,6 +49,16 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(finalize_answer('42', docs), REFUSAL)
         self.assertEqual(finalize_answer('INSUFFICIENT_EVIDENCE', docs), REFUSAL)
 
+    def test_alternative_has_own_link_in_answer(self):
+        docs = [Document(page_content='42', metadata={'source': 'report.pdf', 'page': 0,
+                        'source_url': 'https://bank.example/report'}),
+                Document(page_content='43', metadata={'source': 'review.pdf', 'page': 2,
+                        'source_url': 'https://review.example/analysis'})]
+        answer = finalize_answer('Отчёт: 42 [S1]. Альтернативная оценка: 43 [S2].', docs)
+        self.assertIn('https://bank.example/report', answer)
+        self.assertIn('https://review.example/analysis', answer)
+        self.assertIn('стр. 3', answer)
+
     def test_duplicate_chunks_and_oversized_context(self):
         doc = Document(page_content='a' * 20000, metadata={'source': 'a', 'page': 0})
         selected = select_evidence([doc, doc], 'overview')

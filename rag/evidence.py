@@ -45,24 +45,33 @@ def resolve_query(question, history):
 
 
 def select_evidence(documents, mode='text'):
-    limit = 6 if mode == 'overview' else 3
+    from rag.analysis import response_instructions
+    response_instructions(mode)
+    limit = {'text': 3, 'overview': 6, 'executive': 8, 'expert': 8}[mode]
     unique, seen = [], set()
     for doc in documents:
         key = (doc.metadata.get('source'), doc.metadata.get('page'), doc.page_content)
         if key not in seen and doc.page_content.strip():
             seen.add(key)
             unique.append(doc)
-    if mode == 'overview':
+    # Only operator-verified classification affects authority. Keep the first
+    # alternative even when many official fragments occupy the candidate list.
+    official = [d for d in unique if d.metadata.get('source_kind') == 'official_report']
+    other = [d for d in unique if d.metadata.get('source_kind') != 'official_report']
+    if official:
+        unique = official[:1] + other[:1] + official[1:] + other[1:]
+    if mode in ('overview', 'executive', 'expert'):
         groups = defaultdict(list)
         for doc in unique:
             groups[doc.metadata.get('source')].append(doc)
         # Round-robin preserves similarity order within a document; at most two
         # chunks per source. Diversity cannot recover sources absent in candidates.
-        unique = [group[i] for i in range(2) for group in groups.values() if len(group) > i]
-    selected, remaining = [], MAX_CONTEXT_CHARS
+        unique = [group[i] for i in range(4 if mode == 'expert' else 2)
+                  for group in groups.values() if len(group) > i]
+    selected, remaining = [], (24000 if mode in ('executive', 'expert') else MAX_CONTEXT_CHARS)
     for doc in unique[:limit]:
         header_size = len(_header(doc, len(selected) + 1)) + 4
-        available = min(2000, remaining - header_size)
+        available = min(2800 if mode == 'expert' else 2000, remaining - header_size)
         if available <= 0:
             break
         copy = doc.model_copy(update={'page_content': doc.page_content[:available],
@@ -79,11 +88,18 @@ def _header(doc, number):
     fields = [f'[S{number}]', 'источник: ' + source,
               'название: ' + str(meta.get('title', PurePosixPath(source).name)),
               'страница: ' + (str(page + 1) if isinstance(page, int) else 'неизвестна')]
+    fields.append('source_kind: ' + str(meta.get('source_kind', 'unknown')))
+    if meta.get('source_url'):
+        fields.append('URL: ' + meta['source_url'])
+    if meta.get('published_at'):
+        fields.append('дата публикации (реестр): ' + meta['published_at'])
     for key, label in [('publisher', 'издатель (по имени файла)'),
                        ('as_of', 'по данным на'), ('updated_at', 'обновление страницы')]:
         if meta.get(key) and (key + '_page' not in meta or
                              isinstance(page, int) and meta[key + '_page'] == page + 1):
             provenance = f" (стр. {meta[key + '_page']})" if key + '_page' in meta else ''
+            if key == 'publisher' and meta.get('publisher_origin') == 'registry':
+                label = 'издатель (реестр)'
             fields.append(label + ': ' + str(meta[key]) + provenance)
     return '\n'.join(fields)
 
@@ -106,5 +122,6 @@ def finalize_answer(answer, documents):
         source = str(doc.metadata.get('source_relative', doc.metadata.get('source', 'неизвестен')))
         page = doc.metadata.get('page')
         legend.append(f'[S{number}] {PurePosixPath(source.replace(chr(92), "/")).name}, '
-                      + (f'стр. {page + 1}' if isinstance(page, int) else 'страница неизвестна'))
+                      + (f'стр. {page + 1}' if isinstance(page, int) else 'страница неизвестна')
+                      + (' — ' + doc.metadata['source_url'] if doc.metadata.get('source_url') else ''))
     return answer + '\n\nИсточники:\n' + '\n'.join(legend)

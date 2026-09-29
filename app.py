@@ -1,7 +1,21 @@
 import streamlit as st
 import os
+from uuid import uuid4
 from rag.engine import setup_rag_chain, store
 from rag.index import IndexNotReady
+from rag.analysis import MODE_LABELS
+from rag.slides import export_answer_pptx, can_export, PPTX_MIME
+
+
+def clear_chat():
+    st.session_state.messages = []
+    st.session_state.pop('last_result', None)
+    st.session_state.pop('last_pptx', None)
+    prefix = st.session_state.get('chat_id', '')
+    if prefix:
+        for key in list(store):
+            if key.startswith(prefix + ':'):
+                store.pop(key, None)
 
 st.set_page_config(page_title="Multi-Topic RAG", page_icon="📂", layout="wide")
 st.title("📂 ИИ-Поиск по темам с источниками")
@@ -20,10 +34,10 @@ if not folders:
 with st.sidebar:
     st.header("Настройки")
     selected_topic = st.selectbox("Выберите тему знаний:", folders)
+    selected_mode = st.selectbox('Режим ответа:', list(MODE_LABELS), format_func=MODE_LABELS.get)
     
     if st.button("Очистить историю чата"):
-        st.session_state.messages = []
-        store.clear()
+        clear_chat()
         st.rerun()
     
     st.divider()
@@ -32,11 +46,12 @@ with st.sidebar:
 # 3. Логика переключения тем
 if "current_topic" not in st.session_state:
     st.session_state.current_topic = selected_topic
+if 'chat_id' not in st.session_state:
+    st.session_state.chat_id = uuid4().hex
 
 if st.session_state.current_topic != selected_topic:
     st.session_state.current_topic = selected_topic
-    st.session_state.messages = []
-    store.clear()
+    clear_chat()
     if "chain" in st.session_state:
         del st.session_state.chain
 
@@ -74,10 +89,12 @@ if prompt := st.chat_input("Задайте вопрос по документа�
         # Ответ ассистента
         with st.chat_message("assistant"):
             with st.spinner("Ищу информацию..."):
-                config = {"configurable": {"session_id": f"session_{selected_topic}"}}
+                config = {"configurable": {"session_id": f"{st.session_state.chat_id}:{selected_topic}:{selected_mode}"}}
                 
                 # Получаем ответ и источники
-                full_response = st.session_state.chain.invoke({"input": prompt}, config=config)
+                full_response = st.session_state.chain.invoke({"input": prompt, "mode": selected_mode}, config=config)
+                st.session_state.last_result = full_response
+                st.session_state.pop('last_pptx', None)
                 
                 answer = full_response["answer"]
                 sources = full_response["sources"]
@@ -99,3 +116,14 @@ if prompt := st.chat_input("Задайте вопрос по документа�
                             st.write(s)
 
                 st.session_state.messages.append({"role": "assistant", "content": answer})
+
+result = st.session_state.get('last_result')
+if result and can_export(result):
+    if st.button('Подготовить слайд PPTX'):
+        try:
+            st.session_state.last_pptx = export_answer_pptx(result)
+        except (ImportError, ValueError) as exc:
+            st.error(f'Не удалось подготовить PPTX: {exc}')
+    if st.session_state.get('last_pptx'):
+        st.download_button('Скачать слайд PPTX', st.session_state.last_pptx,
+                           file_name='analysis.pptx', mime=PPTX_MIME)

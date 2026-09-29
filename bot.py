@@ -21,6 +21,7 @@ from rag.engine import setup_rag_chain, store
 from rag.index import IndexNotReady, current_index
 from rag.pipeline import MAX_INPUT_CHARS
 from rag.models import model_options
+from rag.slides import can_export, export_answer_pptx
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / '.env')
@@ -38,7 +39,9 @@ dp = Dispatcher()
 worker = SerialWorker(queue_size=8)
 user_topics, user_chains, user_modes, session_ids, file_links_cache = {}, {}, {}, {}, {}
 topic_lookup = {}
-MODES = {'💬 Текст': 'text', '📝 Обзор': 'overview', '📊 График': 'graph'}
+answer_exports = {}
+MODES = {'💬 Текст': 'text', '📝 Обзор': 'overview', '📊 График': 'graph',
+         '🏦 Топ-менеджер': 'executive', '🔬 Эксперт': 'expert'}
 
 
 def user_key(event):
@@ -60,6 +63,7 @@ def authorized(handler):
 
 
 def reset_session(key):
+    answer_exports.pop(key, None)
     previous = session_ids.get(key)
     if previous:
         store.pop(previous, None)
@@ -78,7 +82,8 @@ def get_folders():
 def get_main_menu():
     builder = ReplyKeyboardBuilder()
     builder.row(types.KeyboardButton(text='📂 Выбрать тему'), types.KeyboardButton(text='🧹 Очистить чат'))
-    builder.row(*(types.KeyboardButton(text=name) for name in MODES))
+    builder.row(*(types.KeyboardButton(text=name) for name in list(MODES)[:3]))
+    builder.row(*(types.KeyboardButton(text=name) for name in list(MODES)[3:]))
     builder.row(types.KeyboardButton(text='❓ Справка'))
     return builder.as_markup(resize_keyboard=True)
 
@@ -95,6 +100,9 @@ async def cmd_start(message):
 @authorized
 async def help_message(message):
     await message.answer('Выберите тему, затем режим «Текст» или «Обзор» и задайте вопрос. '
+                         '«Топ-менеджер» сопоставляет тенденции и влияние на банк; '
+                         '«Эксперт» даёт подробный разбор с цифрами и методикой. '
+                         'Кнопка «Скачать слайд PPTX» экспортирует последний ответ без повторной генерации. '
                          'Кнопки под ответом позволяют скачать источники. '
                          '«Очистить чат» начинает новый диалог. '
                          'В режиме «График» выберите банк кнопкой: доступны активы пяти банков на две даты 2025 года.',
@@ -105,6 +113,8 @@ async def help_message(message):
 @authorized
 async def choose_mode(message):
     mode = MODES[message.text]
+    if user_modes.get(user_key(message), 'text') != mode:
+        reset_session(user_key(message))
     user_modes[user_key(message)] = mode
     text = f'Выбран режим «{message.text}». Задайте вопрос.'
     if mode == 'graph':
@@ -228,11 +238,35 @@ async def send_source_doc(callback):
         await callback.message.answer('Не удалось отправить документ.')
 
 
-def source_buttons(key, sources):
+@dp.callback_query(F.data.startswith('getpptx:'))
+@authorized
+async def send_answer_pptx(callback):
+    key = user_key(callback)
+    saved = answer_exports.get(key)
+    if not saved or saved[0] != callback.data.split(':', 1)[1]:
+        await callback.answer('Ответ устарел. Получите новый ответ.', show_alert=True)
+        return
+    await callback.answer()
+    session = session_ids.get(key)
+    try:
+        payload = await worker.submit(lambda: export_answer_pptx(saved[1]), timeout=REQUEST_TIMEOUT)
+        if session_ids.get(key) != session or answer_exports.get(key) is not saved:
+            return
+        await callback.message.answer_document(BufferedInputFile(payload, filename='analysis.pptx'))
+    except (asyncio.QueueFull, TimeoutError):
+        await callback.message.answer('Экспорт занят. Попробуйте позже.')
+    except Exception as exc:
+        logger.warning('PPTX export failed: %s', type(exc).__name__)
+        await callback.message.answer('Не удалось создать PPTX. Проверьте зависимости сервиса.')
+
+
+def source_buttons(key, sources, export_token=None):
     for item in list(file_links_cache):
         if item[0] == key:
             del file_links_cache[item]
     builder = InlineKeyboardBuilder()
+    if export_token:
+        builder.button(text='Скачать слайд PPTX', callback_data='getpptx:' + export_token)
     paths = dict.fromkeys(doc.metadata.get('source') for doc in sources if doc.metadata.get('source'))
     for source in paths:
         path = Path(source).resolve()
@@ -283,7 +317,12 @@ async def handle_chat(message):
         if response is None or session_ids.get(key) != session:
             return
         chunks = split_telegram_html(response.get('answer') or 'Нет текста ответа.')
-        buttons = source_buttons(key, response.get('sources', []))
+        answer_exports.pop(key, None)
+        export_token = None
+        if can_export(response):
+            export_token = uuid4().hex
+            answer_exports[key] = (export_token, response)
+        buttons = source_buttons(key, response.get('sources', []), export_token)
         for index, chunk in enumerate(chunks):
             if session_ids.get(key) != session:
                 return

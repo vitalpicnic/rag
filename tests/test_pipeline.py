@@ -120,6 +120,27 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result['answer'], REFUSAL)
         self.assertEqual(self.prompts, [])
 
+    def test_expert_has_own_budget_and_source_policy_in_one_generation(self):
+        captured = []
+        def expert(prompt):
+            captured.append(prompt.to_messages()[0].content)
+            return AIMessage(content='42 [S1]')
+        prompt = ChatPromptTemplate.from_messages([('system', '{response_mode}\n{context}'),
+                                                   ('human', '{input}')])
+        chain = build_history_chain(RunnableLambda(self.retrieve), RunnableLambda(self.generate),
+                                    prompt, self.history, expert_llm=RunnableLambda(expert))
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'RAG_METRICS_PATH': str(Path(tmp) / 'metrics.jsonl')}):
+            result = chain.invoke({'input': 'Активы?', 'mode': 'expert'},
+                                  config={'configurable': {'session_id': 'expert'}})
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(self.prompts, [])
+        self.assertIn('official_report', captured[0])
+        self.assertIn('МСФО/РСБУ', captured[0])
+        self.assertIn('альтернативное', captured[0])
+        self.assertEqual(result['mode'], 'expert')
+        self.assertEqual(result['question'], 'Активы?')
+        self.assertTrue(result['generated_at'])
+
     def test_followup_query_and_overview_mode_reach_retriever(self):
         received = []
         def retrieve(query, config):

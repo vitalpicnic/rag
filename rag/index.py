@@ -334,17 +334,21 @@ class IndexRetriever:
         self._lock = threading.Lock()
 
     def invoke(self, query, config=None):
+        from rag.analysis import retrieval_size
+        from rag.sources import load_source_registry, apply_source_registry
         options = (config or {}).get('metadata', {})
         mode = options.get('retrieval_mode', 'text')
+        size = retrieval_size(mode)
+        registry = load_source_registry(Path(self.root) / 'data' / self.topic)
         with self._lock:
             version, manifest = current_index(self.root, self.topic, self.settings)
             if version != self._version:
                 self._store = _load_version(self.root, version, manifest, self.embeddings)
                 self._version = version
             store = self._store
-        matches = store.similarity_search_with_score(query, k=24 if mode == 'overview' else 12)
+        matches = store.similarity_search_with_score(query, k=size)
         return [doc.model_copy(update={'metadata': {
-            **doc.metadata, 'retrieval_distance': float(distance),
+            **apply_source_registry(doc.metadata, registry, self.topic), 'retrieval_distance': float(distance),
             'retrieval_metric': 'squared_l2', 'index_fingerprint': manifest['snapshot']['fingerprint'],
             'embedding_model': self.settings['embedding']['model'],
         }}) for doc, distance in matches]

@@ -12,8 +12,13 @@ Gemini/OpenAI-compatible API; опционально Ollama, BM25 и CPU cross-e
 
 **Спецификация:** [утверждённая ревизия 3](../specs/2026-09-29-local-first-vps-design.md),
 архитектурное содержимое зафиксировано коммитом `82eb42e`.
-Пользователь подтвердил спецификацию 2026-09-30. Этот план ожидает отдельного
-согласования. План от 2026-09-29 исторический; его задачи не выполняются.
+Пользователь подтвердил спецификацию и затем отдельно разрешил реализацию
+2026-09-30. План от 2026-09-29 исторический; его задачи не выполняются.
+
+Текущий статус: задача 0 выполняется в ветке `feat/local-first-vps`.
+Baseline wrapper и 10 его тестов готовы; полный локальный suite — 88 passed,
+0 failures/errors/skipped. Живой A заблокирован отсутствием ключа Gemini,
+разрешения на передачу корпуса и бюджета API. Retrieval/generation не изменены.
 
 **Выполнение:** последовательно в текущей сессии, без субагентов, с применением
 Superpowers executing-plans. Здесь только проектные решения; инструкции навыков
@@ -120,11 +125,11 @@ FastAPI/Uvicorn и provider SDK фиксируются Linux lock-файлом �
 **Интерфейс:** `capture_baseline(checkout: Path, corpus: Path, output: Path) -> Path`;
 output — новый закрытый каталог, не перезаписываемый отчёт и raw results.
 
-- [ ] Написать tests `test_refuses_existing_output`, `test_never_modifies_source_root`,
+- [x] Написать tests `test_refuses_existing_output`, `test_never_modifies_source_root`,
   `test_missing_credentials_is_blocked`: исходные hashes неизменны, нет API при missing prerequisites.
-- [ ] Выполнить `python -m unittest discover -s tests -p test_baseline.py -v`;
+- [x] Выполнить `python -m unittest discover -s tests -p test_baseline.py -v`;
   увидеть FAIL из-за отсутствующего wrapper, а не неверного окружения.
-- [ ] Реализовать wrapper: отдельный checkout `b2c8022`, копия corpus, исходные options/prompts;
+- [x] Реализовать wrapper: отдельный checkout `b2c8022`, копия corpus, исходные options/prompts;
   если index отсутствует, явно build только внутри этого checkout. Записать commit,
   package versions, requested/returned model IDs, corpus/dataset/artifact hashes,
   время, raw ответы, usage, ошибки; запускать исходный evaluator без изменения prompts.
@@ -511,11 +516,10 @@ CLOUD остаётся доступным, HYBRID не объявляется г
 
 ## Точка согласования
 
-План проверен на соответствие ревизии 3. Он не является отчётом о реализации:
-ни одна задача выше ещё не отмечена выполненной. Исторические 78 unit tests
-от 2026-09-29 не доказывают готовность будущих изменений.
+План проверен на соответствие ревизии 3 и утверждён. Шаги подготовки baseline
+отмечены выше; задача 0 целиком не завершена без живого A. Исторические 78 unit
+tests от 2026-09-29 не доказывают готовность будущих изменений.
 
-Следующее действие — отдельное подтверждение этого implementation plan.
-После него выполнение начинается с baseline gate. Без корпуса/разрешения на
+Выполнение начато с baseline gate. Без корпуса/разрешения на
 передачу/API доступа baseline остаётся blocked; запрос недостающих ресурсов
 делается тогда с конкретным перечнем, без передачи секретов через Git/документы.

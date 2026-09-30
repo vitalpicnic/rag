@@ -1,0 +1,4 @@
+# Only for explicit model downloads; recreate with the base file afterwards.
+networks:
+  local:
+    internal: false

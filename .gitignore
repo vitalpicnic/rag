@@ -1,4 +1,6 @@
 __pycache__/
+.worktrees/
+.superpowers/
 .test_deps/
 .audit_deps/
 .env

@@ -230,6 +230,12 @@ E5→FAISS smoke на Windows выполнен; Linux/8 ГБ приёмка ос
 
 ### Задача 4. Schema v2, миграция, публикация и rollback
 
+Статус 2026-10-01: реализованы immutable v2 store, административный CLI,
+activation/rollback и отдельный trusted migration tool. Unit fault injection
+проверяет build/fsync/replace/warmup/lock ошибки. Windows не подтверждает Linux
+directory fsync/SIGKILL; контейнерная миграция и интеграция drain/model owner с
+будущим runtime остаются открытыми. См. [эксплуатацию v2](../../index-v2.md).
+
 **Вход:** задача 3. **Файлы:** создать `rag/index_store.py`, `scripts/migrate_index.py`,
 `scripts/index_admin.py`, `tests/test_index_store.py`; изменить `rag/index.py`, `tests/test_index.py`.
 **Интерфейсы:** `build_version(root: Path, topic: str, settings: Settings) -> Bundle`;

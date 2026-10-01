@@ -6,6 +6,9 @@
 
 ## Архитектурная спецификация для анализа
 
+- [Локальные embeddings и подготовка фрагментов](docs/local-embeddings.md)
+  — CPU E5, фиксированная модель, v2 IDs, повторное использование и offline smoke.
+
 - [Установка локальной Ollama: Windows и Linux](docs/ollama-setup.md)
   — модель, закрытый endpoint, Compose и проверка адаптера. Полная LOCAL-интеграция
   ещё разрабатывается; основной интерфейс пока сохраняет Gemini pipeline.

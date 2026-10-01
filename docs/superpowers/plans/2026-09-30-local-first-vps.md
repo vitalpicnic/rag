@@ -200,6 +200,13 @@ Capabilities фиксирует input/output/context limits, framing и thinking
 
 ### Задача 3. CPU embeddings и независимые IDs
 
+Статус 2026-10-01: реализованы отдельная фабрика embeddings, CPU E5, bootstrap
+по полному revision SHA и подготовка v2 chunks через `scripts.prepare_local`.
+Существующие `build_index.py` и legacy `rag/index.py` сохранены без изменения:
+новые prepared-артефакты пока не подключены к старому publisher, чтобы не смешивать
+форматы. Schema v2 publisher/активация относятся к задаче 4. Реальный offline
+E5→FAISS smoke на Windows выполнен; Linux/8 ГБ приёмка остаётся задачей deployment.
+
 **Вход:** задача 2. **Файлы:** создать `rag/embeddings.py`, `rag/index_schema.py`,
 `scripts/bootstrap_model.py`, `tests/test_embeddings.py`, `tests/test_index_schema.py`;
 изменить `rag/index.py`, `build_index.py`, `tests/test_index_config.py`.

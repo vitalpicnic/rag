@@ -1,0 +1,8 @@
+# Optional CPU embedding dependencies; install alongside requirements-bot.txt.
+# Direct versions verified on Windows/Python 3.14; Linux lock comes with deployment.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1+cpu
+sentence-transformers==6.1.0
+transformers==5.18.0
+tokenizers==0.23.2
+huggingface-hub==1.33.0

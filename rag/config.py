@@ -33,6 +33,9 @@ class Settings:
     context_window: int
     timeout: int
     google_key: str = field(default='', repr=False)
+    embedding_cache: str = 'model_cache/e5'
+    embedding_batch_size: int = 8
+    embedding_threads: int = 2
 
 
 def load_settings(env):
@@ -60,6 +63,10 @@ def load_settings(env):
     timeout = int(env.get('OLLAMA_TIMEOUT', '120'))
     if not 512 <= context <= 131072 or not 1 <= timeout <= 600:
         raise ValueError('Invalid context/timeout limits')
+    batch = int(env.get('RAG_EMBEDDING_BATCH_SIZE', '8'))
+    threads = int(env.get('RAG_EMBEDDING_THREADS', '2'))
+    if not 1 <= batch <= 64 or not 1 <= threads <= 4:
+        raise ValueError('Invalid embedding resource limits')
     return Settings(profile, environment, provider, embedding, model,
                     validate_ollama_url(env.get('OLLAMA_BASE_URL', 'http://127.0.0.1:11434')),
-                    context, timeout, key)
+                    context, timeout, key, env.get('RAG_EMBEDDING_CACHE', 'model_cache/e5'), batch, threads)

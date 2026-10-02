@@ -6,6 +6,9 @@
 
 ## Архитектурная спецификация для анализа
 
+- [Кэш проверенного состояния FAISS v2](docs/verified-snapshots.md)
+  — watcher, периодический SHA verify, expiry и проверка закреплённого snapshot.
+
 - [FAISS schema v2: сборка, активация, rollback и миграция](docs/index-v2.md)
   — административные команды для режима обслуживания; serving ещё не подключён.
 

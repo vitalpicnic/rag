@@ -324,6 +324,43 @@ def prepare_corpus(root, topic, settings=None):
                 'document_count': len(stats), 'chunk_count': len(chunks), 'index_published': False}
 
 
+class VerifiedIndexRetriever:
+    """Opt-in v2 retrieval; share one verifier/model through the future runtime."""
+    def __init__(self, verifier, topic, embeddings):
+        self.verifier, self.topic, self.embeddings = verifier, topic, embeddings
+
+    def retrieve_with_lease(self, query, config=None):
+        import numpy as np
+        from langchain_core.documents import Document
+        from rag.analysis import retrieval_size
+        from rag.index_schema import embedding_profile_id
+        from rag.sources import load_source_registry, apply_source_registry
+        size = retrieval_size((config or {}).get('metadata', {}).get('retrieval_mode', 'text'))
+        snapshot = self.verifier.acquire(self.topic)
+        if embedding_profile_id(self.embeddings.profile) != snapshot.bundle['embedding_profile_id']:
+            raise IndexNotReady('Embedding profile differs from the verified index')
+        self.verifier.validate_lease(snapshot)
+        query_vector = np.asarray([self.embeddings.embed_query(query)], dtype='float32')
+        if query_vector.shape != (1, snapshot.index.d) or not np.isfinite(query_vector).all():
+            raise ValueError('Invalid query embedding')
+        distances, positions = snapshot.index.search(query_vector, min(size, len(snapshot.rows)))
+        registry = load_source_registry(self.verifier.root/'data'/self.topic)
+        documents = []
+        for position, distance in zip(positions[0], distances[0]):
+            row = snapshot.rows[int(position)]
+            metadata = apply_source_registry(row['metadata'], registry, self.topic)
+            documents.append(Document(page_content=row['text'], metadata={**metadata,
+                'retrieval_distance': float(distance), 'retrieval_metric': 'squared_l2',
+                'index_fingerprint': snapshot.bundle['chunks_id'],
+                'index_version': snapshot.bundle['index_version'],
+                'embedding_model': self.embeddings.profile['model']}))
+        self.verifier.validate_lease(snapshot)
+        return documents, snapshot
+
+    def invoke(self, query, config=None):
+        return self.retrieve_with_lease(query, config)[0]
+
+
 class IndexRetriever:
     """Recheck freshness per query and reload only when the published version changes."""
     def __init__(self, root, topic, embeddings, settings=None):

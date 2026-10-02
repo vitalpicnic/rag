@@ -263,6 +263,11 @@ manifest SHA и относительный путь. JSONL docstore и mapping �
 
 ### Задача 5. VerifiedSnapshot вне горячего пути
 
+Статус 2026-10-02: реализованы SnapshotVerifier, два фоновых worker, coalesced verify,
+watcher/expiry/invalidation и отдельный VerifiedIndexRetriever. Legacy retriever
+пока сохранён; интеграция с общим runtime, privacy gate, LRU/RAM и Linux CPU/I/O
+приоритетами остаётся задачами 6–10. [Контракт](../../verified-snapshots.md).
+
 **Вход:** задача 4. **Файлы:** создать `rag/verification.py`, `tests/test_verification.py`;
 изменить `rag/index.py` и `rag/index_store.py`.
 **Интерфейсы:** `SnapshotVerifier.acquire(topic: str) -> VerifiedSnapshot`;

@@ -44,7 +44,7 @@ def resolve_query(question, history):
     return 'Предыдущие вопросы пользователя (контекст):\n' + '\n'.join(previous)[-2400:] + '\nТекущий вопрос (приоритет):\n' + question
 
 
-def select_evidence(documents, mode='text'):
+def select_evidence(documents, mode='text', *, whole_units=False):
     from rag.analysis import response_instructions
     response_instructions(mode)
     limit = {'text': 3, 'overview': 6, 'executive': 8, 'expert': 8}[mode]
@@ -68,6 +68,8 @@ def select_evidence(documents, mode='text'):
         # chunks per source. Diversity cannot recover sources absent in candidates.
         unique = [group[i] for i in range(4 if mode == 'expert' else 2)
                   for group in groups.values() if len(group) > i]
+    if whole_units:
+        return unique[:limit]
     selected, remaining = [], (24000 if mode in ('executive', 'expert') else MAX_CONTEXT_CHARS)
     for doc in unique[:limit]:
         header_size = len(_header(doc, len(selected) + 1)) + 4

@@ -319,6 +319,14 @@ production поведению; старый образ допустим толь
 
 ### Задача 7. Token-aware packing полного запроса
 
+2026-10-02: реализованы `TokenContract`, `TokenCounter`, `PackedRequest`,
+`pack_request` и подключение к цепочке через `token_counter`. 17 адресных тестов;
+RED: отсутствие модуля/аргумента, затем GREEN. Полный набор: 168 PASS.
+Production без счётчика закрыт, legacy development сохранён.
+Рабочие backend-счётчики Ollama/Gemini и quality control arm ещё не проверены;
+этап не означает production-приёмку. Детали и условия подключения:
+[token-budget.md](../../token-budget.md).
+
 **Вход:** задачи 2, 6. **Файлы:** создать `rag/token_budget.py`, `tests/test_token_budget.py`;
 изменить `rag/history.py`, `rag/evidence.py`, `rag/pipeline.py` и их тесты.
 **Интерфейс:** `pack_request(system: str, question: str, history: list, evidence: list,

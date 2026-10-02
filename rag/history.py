@@ -7,6 +7,20 @@ def estimated_tokens(messages):
     return sum(math.ceil(len(str(m.content).encode('utf-8')) / 4) + 6 for m in messages)
 
 
+def complete_turns(messages):
+    """Return complete user/assistant pairs only, without truncating their text."""
+    turns, pending = [], None
+    for message in messages:
+        if message.type == 'human':
+            pending = message
+        elif message.type == 'ai' and pending is not None:
+            turns.append([pending, message])
+            pending = None
+        else:
+            pending = None
+    return turns
+
+
 def trim_history(messages, budget=800):
     if budget < 16:
         return []

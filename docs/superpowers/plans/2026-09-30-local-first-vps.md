@@ -290,6 +290,15 @@ watcher/expiry/invalidation и отдельный VerifiedIndexRetriever. Legacy
 
 ### Задача 6. Privacy policy и отзыв разрешений
 
+Реализован модуль политики и gate генерации (2026-10-02). API уточнён:
+`PolicyStore.read()`, `PrivacyGate.authorize/authorize_documents`, `validate`, `call`.
+Политика вынесена в отдельный файл вместо изменения реестра достоверности источников.
+15 адресных тестов проходят, включая интеграцию цепочки и отзыв во время генерации.
+RED подтверждён отсутствием аргумента `privacy_gate`, затем получен GREEN.
+Production без gate закрыт; подключение нового runtime и countTokens остаётся
+задачами 7–8. История без provenance блокируется. Формат, пример и ограничения:
+[privacy-policy.md](../../privacy-policy.md).
+
 **Вход:** задачи 2, 5. **Файлы:** создать `rag/privacy.py`, `tests/test_privacy.py`;
 изменить `rag/sources.py`, `rag/pipeline.py`, тесты источников.
 **Интерфейс:** `authorize_external(topic: str, source_ids: list[str], provider: str,

@@ -1,11 +1,13 @@
 """RAG orchestration with stage metrics, independently of provider initialization."""
 from uuid import uuid4
+import os
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_core.runnables.history import RunnableWithMessageHistory
 
 from rag.metrics import measure_call
+from rag.privacy import PrivacyDenied
 from rag.history import trim_history
 from rag.analysis import response_instructions
 from datetime import datetime, timezone
@@ -15,7 +17,10 @@ MAX_INPUT_CHARS = 8000
 
 
 def build_history_chain(retriever, llm, qa_prompt, history_factory, summary_llm=None, history_budget=800,
-                        model_name='gemini-2.5-flash', expert_llm=None):
+                        model_name='gemini-2.5-flash', expert_llm=None, privacy_gate=None):
+    if os.getenv('RAG_ENV', 'development') == 'production' and privacy_gate is None:
+        raise PrivacyDenied('Production pipeline requires an explicit privacy gate')
+
     def retrieve(inputs, config):
         if not isinstance(inputs['input'], str) or len(inputs['input']) > MAX_INPUT_CHARS:
             raise ValueError('Вопрос должен содержать не более 8000 символов.')
@@ -33,6 +38,8 @@ def build_history_chain(retriever, llm, qa_prompt, history_factory, summary_llm=
     def generate_answer(inputs, config):
         if not inputs['docs']:
             return REFUSAL
+        lease = (privacy_gate.authorize_documents(inputs['docs'], inputs['chat_history'])
+                 if privacy_gate is not None else None)
         inputs = {**inputs, 'chat_history': trim_history(inputs['chat_history'], history_budget)}
         prompt = qa_prompt.invoke(inputs, config=config)
         selected_llm = llm
@@ -41,12 +48,20 @@ def build_history_chain(retriever, llm, qa_prompt, history_factory, summary_llm=
         if inputs.get('mode') == 'expert' and expert_llm is not None:
             selected_llm = expert_llm
         # Capture AIMessage usage before StrOutputParser discards the metadata.
+        def invoke(prompt, config):
+            if privacy_gate is not None:
+                return privacy_gate.call(lease, selected_llm.invoke, prompt, config=config)
+            return selected_llm.invoke(prompt, config=config)
+
         response = measure_call(
-            selected_llm.invoke, prompt, config=config,
+            invoke, prompt, config=config,
             stage='generation', model=model_name,
             request_id=inputs['_request_id'],
         )
-        return finalize_answer(StrOutputParser().invoke(response), inputs['docs'])
+        answer = finalize_answer(StrOutputParser().invoke(response), inputs['docs'])
+        if privacy_gate is not None:
+            privacy_gate.validate(lease)
+        return answer
 
     chain = (
         RunnablePassthrough.assign(_request_id=lambda x: x.get('request_id') or uuid4().hex)

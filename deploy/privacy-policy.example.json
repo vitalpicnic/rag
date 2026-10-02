@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "topics": {
+    "default": {
+      "external_generation": "deny",
+      "providers": {
+        "gemini": ["https://generativelanguage.googleapis.com"]
+      },
+      "sources": {}
+    }
+  }
+}

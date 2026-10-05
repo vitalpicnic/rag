@@ -20,8 +20,8 @@ MAX_INPUT_CHARS = 8000
 
 def build_history_chain(retriever, llm, qa_prompt, history_factory, summary_llm=None, history_budget=800,
                         model_name='gemini-2.5-flash', expert_llm=None, privacy_gate=None,
-                        token_counter=None):
-    if os.getenv('RAG_ENV', 'development') == 'production' and privacy_gate is None:
+                        token_counter=None, local_generation=False):
+    if os.getenv('RAG_ENV', 'development') == 'production' and privacy_gate is None and not local_generation:
         raise PrivacyDenied('Production pipeline requires an explicit privacy gate')
     if os.getenv('RAG_ENV', 'development') == 'production' and token_counter is None:
         raise BudgetDenied('Production pipeline requires an exact model counter')

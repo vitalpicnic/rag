@@ -28,6 +28,7 @@ Thumbs.db
 
 # Corpus and generated data stay local
 /policies/
+/.model-owner.lock
 /data/*
 !/data/README.md
 /faiss_index/

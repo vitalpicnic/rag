@@ -3,6 +3,12 @@ import asyncio
 from html import escape
 
 
+async def query_runtime(runtime, request):
+    """Use the shared runtime's admission; cancelling this await never frees its slot."""
+    future = runtime.submit(request)
+    return await asyncio.wait_for(asyncio.wrap_future(future), runtime.wait_timeout)
+
+
 def split_telegram_html(text, limit=4000):
     """Escape each character before splitting; never cut entities or emoji pairs."""
     if limit < 6:

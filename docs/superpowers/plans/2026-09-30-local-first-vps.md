@@ -352,6 +352,16 @@ production без точного бюджета не продвигается.
 
 ### Задача 8. Общий runtime, очередь и model ownership
 
+2026-10-05: реализованы `RagRuntime`, `RuntimeQueryHandler`, `ModelOwnerLock`,
+`IndexCache`/`SnapshotCache`; общий prompt legacy сохранён. `create_runtime`
+связывает verified retrieval, packing, privacy и generation без per-topic model
+creation. Административный CLI захватывает owner lock до создания модели.
+17 адресных тестов проходят; проверены реальные FAISS и дочерние процессы Windows.
+RED: отсутствующие модули/интерфейсы; отдельно отменённое задание продолжало запускаться;
+GREEN после подключения Future к async-адаптеру. Linux/cgroup и live LLM пока не
+приняты; перенос старых интерфейсов на backend остаётся этапом 9.
+[Описание runtime и эксплуатационных ограничений](../../runtime.md).
+
 **Вход:** задачи 3–7. **Файлы:** создать `rag/runtime.py`, `rag/resources.py`,
 `tests/test_runtime.py`; изменить `rag/engine.py`, `rag/bot_support.py`.
 **Интерфейсы:** `RagRuntime.query(request: dict) -> dict`, `drain() -> None`,

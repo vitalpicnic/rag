@@ -7,6 +7,7 @@ from pathlib import Path
 from rag.config import load_settings
 from rag.embeddings import create_embeddings
 from rag.index_store import build_version, load_bundle, current_bundle, activate_bundle, rollback_bundle
+from rag.resources import ModelOwnerLock
 
 
 def main():
@@ -20,6 +21,11 @@ def main():
     args = parser.parse_args()
     if args.action != 'verify' and not args.maintenance:
         parser.error('Stop bot/web/CLI/runtime and pass --maintenance')
+    with ModelOwnerLock(args.root):
+        _execute(args, parser)
+
+
+def _execute(args, parser):
     if args.action == 'build':
         if not args.output or args.output.exists():
             parser.error('Build requires a new --output file')

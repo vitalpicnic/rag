@@ -384,6 +384,12 @@ Runtime использует GenerationProvider, SnapshotVerifier и PackedReque
 
 ### Задача 9. Внутренний API и сохранение интерфейсов
 
+Статус 2026-10-10: реализованы API и адаптеры CLI/TG/web, token-bound source/PPTX,
+reset, fail-closed allowlist, polling lock и heartbeat. Офлайн HTTP/FAISS/PPTX
+проверки проходят. Уточнение реализации: файлы выдаются ограниченным буфером
+до 32 MiB с одной файловой операцией, а не неограниченным streaming.
+Живые Telegram/LLM/UI на VPS не проверены. Контракт: `docs/runtime-api.md`.
+
 **Вход:** задача 8. **Файлы:** создать `rag/runtime_api.py`, `rag/runtime_client.py`,
 `rag/health.py`, `tests/test_runtime_api.py`; изменить `main.py`, `bot.py`, `app.py`,
 `rag/tables.py`, `rag/slides.py`, tests бота/таблиц/слайдов.
@@ -410,6 +416,14 @@ query response сохраняет answer/sources/режим/статус verific
 **Откат:** прежний image за закрытым доступом; production allowlist и privacy сохраняются.
 
 ### Задача 10. Воспроизводимый Compose и приёмка HYBRID
+
+Статус 2026-10-10: подготовлены digest-pinned Dockerfile, Linux hash locks,
+Compose с лимитами и secrets, bootstrap Ubuntu 24.04 и CI. Compose config и
+shell syntax проверены. Docker Engine недоступен, Linux build/pip check,
+идемпотентный host bootstrap, runtime restart и live HYBRID quality gate — not_run.
+Запуск без генерации явно возвращает readiness=false. Задача целиком не принята.
+Общий офлайн suite: 217 PASS, 0 failures/errors/skips; полный smoke с настоящей
+E5 и тестовой LLM прошёл на Windows без сети. Linux image smoke остаётся not_run.
 
 **Вход:** задача 9; работающий Linux Docker Engine, model download и внешний API.
 **Файлы:** создать Docker/Compose/lock/env файлы из карты выше, `scripts/bootstrap-vps.sh`,
@@ -447,6 +461,13 @@ query response сохраняет answer/sources/режим/статус verific
 CLOUD остаётся доступным, HYBRID не объявляется готовым по качеству.
 
 ### Задача 11. Backup, restore, мониторинг и эксплуатационная приёмка
+
+Статус 2026-10-10: реализованы backup/restore с hashes и owner lock, безопасным
+staging, SQLite integrity и настоящим FAISS retrieval smoke, метрики ресурсов,
+ротация журналов, сводки стадий/usage и нагрузочный CLI без текстов в отчёте.
+Офлайн tests проверяют повреждения, небезопасные архивы и новый root.
+Linux recovery/restart drill, off-host transfer, 8 GB latency/RAM/quality — not_run.
+Retention выполняет оператор по runbook; автоматическое удаление не включено.
 
 **Вход:** принятый HYBRID; задан закрытый off-host backup destination.
 **Файлы:** создать `scripts/backup.sh`, `scripts/restore.sh`, `scripts/benchmark_rag.py`,
@@ -498,6 +519,11 @@ CLOUD остаётся доступным, HYBRID не объявляется г
 Нехватка GPU/VRAM = blocked для этого эксперимента, не отказ основного HYBRID.
 
 ### Задача 13. BM25 и RRF отдельным экспериментом C
+
+Статус 2026-10-10: офлайн BM25/RRF, JSON store и CLI реализованы и проверены
+на числах/Unicode, fingerprint, tie-break и несовместимых dense-кандидатах.
+Production retrieval не меняется. C против B — not_run без одинакового live
+LLM/gold; эксперимент не объявляется улучшением качества. См. `docs/sparse-retrieval.md`.
 
 **Вход:** измерены A/B, принят HYBRID. **Файлы:** создать `rag/sparse.py`,
 `tests/test_sparse.py`; изменить `rag/index.py`, schema и evaluator.

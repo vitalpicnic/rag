@@ -14,8 +14,9 @@ class ResourceBusy(RuntimeError):
 
 class ModelOwnerLock:
     """Kernel lock shared by cooperating serving/indexing processes. Never unlink."""
-    def __init__(self, root):
-        self.path = Path(root).resolve() / '.model-owner.lock'
+    def __init__(self, root, filename='.model-owner.lock'):
+        if Path(filename).name != filename: raise ValueError('Invalid lock filename')
+        self.path = Path(root).resolve() / filename
         self.handle = None
 
     def acquire(self):

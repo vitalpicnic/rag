@@ -9,6 +9,14 @@ import rag.metrics
 
 
 class MetricsTests(unittest.TestCase):
+    def test_stage_log_rotates_before_append(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'metrics.jsonl'
+            path.write_bytes(b' '*(10*1024*1024))
+            rag.metrics.write_event({'status':'ok'},path)
+            self.assertTrue(path.with_name('metrics.jsonl.1').exists())
+            self.assertEqual(json.loads(path.read_text()),{'status':'ok'})
+
     def test_langchain_usage_does_not_double_count_thinking(self):
         message = SimpleNamespace(usage_metadata={
             'input_tokens': 100, 'output_tokens': 30, 'total_tokens': 130,

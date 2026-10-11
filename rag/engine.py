@@ -105,7 +105,8 @@ class RuntimeQueryHandler:
             chain = build_history_chain(RunnableLambda(retrieve), RunnableLambda(generate),
                         _qa_prompt(), lambda _: history, model_name=self.settings.model,
                         privacy_gate=gate, token_counter=TokenCounter(self.counter.contract,count),
-                        local_generation=self.settings.llm_provider == 'ollama')
+                          local_generation=self.settings.llm_provider == 'ollama',
+                          retrieval_model=embeddings.profile['model'])
             result = chain.invoke({'input':request['question'],'mode':request['mode']},
                                   config={'configurable':{'session_id':'runtime'}})
             check()
@@ -118,6 +119,9 @@ class RuntimeQueryHandler:
             return {**result, 'index_version':snapshot.bundle['index_version']}
 
     def maintenance(self): self.cache.maintenance()
+    def reset_history(self, principal, session, topic):
+        for key in list(self.histories):
+            if key[:3] == (principal,session,topic): del self.histories[key]
     def readiness(self, topic): return self.cache.readiness(topic)
     def close(self):
         self.cache.close()

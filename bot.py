@@ -15,20 +15,35 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from aiogram.types import FSInputFile, BufferedInputFile
-from rag.tables import CHOICES, SOURCE, TableNotReady, render_chart, load_rows
+from rag.tables import CHOICES, SOURCE, TableNotReady
 from rag.bot_support import SerialWorker, split_telegram_html
-from rag.engine import setup_rag_chain, store
-from rag.index import IndexNotReady, current_index
-from rag.pipeline import MAX_INPUT_CHARS
-from rag.models import model_options
-from rag.slides import can_export, export_answer_pptx
+from rag.runtime_client import RuntimeClient, RemoteChain
+from rag.slides import can_export
+from rag.resources import ModelOwnerLock
+from rag.health import event_loop_heartbeat
+MAX_INPUT_CHARS = 8000
+IndexNotReady = RuntimeError
+store = {}  # Local UI state only; model history belongs to runtime.
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / '.env')
 
 
 def read_ids(name):
-    return {int(value.strip()) for value in os.getenv(name, '').split(',') if value.strip()}
+    values = [v.strip() for v in os.getenv(name,'').split(',') if v.strip()]
+    return {int(v) for v in values} if values and all(v.isdecimal() and int(v)>0 for v in values) else set()
+
+
+def setup_rag_chain(topic, principal):
+    return RemoteChain(RuntimeClient.from_env(principal),topic)
+
+
+def export_answer_pptx(result):
+    return RuntimeClient.from_env(result['_principal']).download('exports',result['export_token'])
+
+
+def render_chart(root, database, choice, principal='bot'):
+    return RuntimeClient.from_env(principal).chart_with_sources(choice)
 
 
 ADMIN_IDS = read_ids('TELEGRAM_ADMIN_IDS')
@@ -52,7 +67,7 @@ def user_key(event):
 def authorized(handler):
     @wraps(handler)
     async def wrapped(event, *args, **kwargs):
-        if ALLOWED_IDS and event.from_user.id not in ALLOWED_IDS:
+        if event.from_user.id not in ALLOWED_IDS:
             if hasattr(event, 'data'):
                 await event.answer('Доступ к боту ограничен.', show_alert=True)
             else:
@@ -75,8 +90,7 @@ def reset_session(key):
 
 
 def get_folders():
-    data = ROOT / 'data'
-    return sorted(path.name for path in data.iterdir() if path.is_dir()) if data.is_dir() else []
+    return RuntimeClient.from_env('topics').topics()
 
 
 def get_main_menu():
@@ -142,12 +156,13 @@ async def handle_graph(message, key):
         return
     session = session_ids.get(key) or reset_session(key)
     try:
-        image, caption = await worker.submit(lambda: render_chart(ROOT, None, message.text),
+        chart = await worker.submit(lambda: render_chart(ROOT, None, message.text,principal=f'{key[0]}:{key[1]}'),
                                               timeout=REQUEST_TIMEOUT)
+        image,caption = chart[:2]
         if session_ids.get(key) != session or user_modes.get(key) != 'graph':
             return
         from types import SimpleNamespace
-        buttons = source_buttons(key, [SimpleNamespace(metadata={'source': str(ROOT / SOURCE)})])
+        buttons = source_buttons(key,chart[2] if len(chart)>2 else [])
         await message.answer_photo(BufferedInputFile(image, filename='assets.png'),
                                    caption=caption, reply_markup=buttons)
     except TableNotReady as exc:
@@ -164,7 +179,13 @@ async def handle_graph(message, key):
 @dp.message(F.text == '🧹 Очистить чат')
 @authorized
 async def clear_history(message):
-    reset_session(user_key(message))
+    key = user_key(message)
+    old = session_ids.get(key)
+    reset_session(key)
+    chain = user_chains.get(key)
+    if old and isinstance(chain,RemoteChain):
+        try: await asyncio.to_thread(chain.client.reset,old,chain.topic)
+        except RuntimeError: logger.warning('Backend history reset failed')
     await message.answer('История диалога очищена.', reply_markup=get_main_menu())
 
 
@@ -184,7 +205,7 @@ async def cmd_clearcache(message):
 @authorized
 async def show_topics(message):
     builder = InlineKeyboardBuilder()
-    for topic in get_folders():
+    for topic in await asyncio.to_thread(get_folders):
         token = hashlib.sha256(topic.encode('utf-8')).hexdigest()[:16]
         topic_lookup[token] = topic
         builder.button(text=topic, callback_data='set_topic:' + token)
@@ -197,7 +218,7 @@ async def show_topics(message):
 async def process_topic(callback):
     await callback.answer()
     topic = topic_lookup.get(callback.data.split(':', 1)[1])
-    if topic not in get_folders():
+    if topic not in await asyncio.to_thread(get_folders):
         await callback.message.answer('Тема не найдена. Откройте список тем заново.')
         return
     key = user_key(callback)
@@ -206,7 +227,7 @@ async def process_topic(callback):
     user_topics.pop(key, None)
     status = await callback.message.answer('Загружаю готовую базу…')
     try:
-        chain = await worker.submit(lambda: setup_rag_chain(topic), timeout=REQUEST_TIMEOUT)
+        chain = await worker.submit(lambda: setup_rag_chain(topic,f'{key[0]}:{key[1]}'), timeout=REQUEST_TIMEOUT)
         if session_ids.get(key) == session:
             user_chains[key], user_topics[key] = chain, topic
             await status.edit_text(f'Готово. Выбрана тема: {topic}')
@@ -227,12 +248,14 @@ async def process_topic(callback):
 @authorized
 async def send_source_doc(callback):
     path = file_links_cache.get((user_key(callback), callback.data.split(':', 1)[1]))
-    if not path or not Path(path).is_file():
+    if not path:
         await callback.answer('Источник не найден. Получите новый ответ.', show_alert=True)
         return
     await callback.answer()
     try:
-        await callback.message.answer_document(FSInputFile(path))
+        key = user_key(callback)
+        content = await asyncio.to_thread(RuntimeClient.from_env(f'{key[0]}:{key[1]}').download,'sources',path[0])
+        await callback.message.answer_document(BufferedInputFile(content,filename=path[1]))
     except Exception as exc:
         logger.warning('Document send failed: %s', type(exc).__name__)
         await callback.message.answer('Не удалось отправить документ.')
@@ -267,14 +290,12 @@ def source_buttons(key, sources, export_token=None):
     builder = InlineKeyboardBuilder()
     if export_token:
         builder.button(text='Скачать слайд PPTX', callback_data='getpptx:' + export_token)
-    paths = dict.fromkeys(doc.metadata.get('source') for doc in sources if doc.metadata.get('source'))
-    for source in paths:
-        path = Path(source).resolve()
-        if not path.is_relative_to(ROOT / 'data') or not path.is_file():
-            continue
-        token = hashlib.sha256(str(path).encode('utf-8')).hexdigest()[:16]
-        file_links_cache[(key, token)] = str(path)
-        builder.button(text='Скачать: ' + path.name[:100], callback_data='getdoc:' + token)
+    for doc in sources:
+        token = doc.metadata.get('download_token')
+        if not token: continue
+        name = Path(doc.metadata.get('source','source')).name
+        file_links_cache[(key,token)] = (token,name)
+        builder.button(text='Скачать: '+name[:100],callback_data='getdoc:'+token)
     builder.adjust(1)
     return builder.as_markup() if list(builder.buttons) else None
 
@@ -316,6 +337,7 @@ async def handle_chat(message):
         response = await worker.submit(invoke, timeout=REQUEST_TIMEOUT)
         if response is None or session_ids.get(key) != session:
             return
+        response['_principal'] = f'{key[0]}:{key[1]}'
         chunks = split_telegram_html(response.get('answer') or 'Нет текста ответа.')
         answer_exports.pop(key, None)
         export_token = None
@@ -346,30 +368,27 @@ async def main():
     parser.add_argument('--check', action='store_true', help='Check local readiness without API calls')
     args = parser.parse_args()
     if args.check:
-        indexes = {}
-        for topic in get_folders():
-            try:
-                current_index(ROOT, topic)
-                indexes[topic] = 'ready'
-            except IndexNotReady:
-                indexes[topic] = 'not_ready'
-        try:
-            tables = {'status': 'ready', 'observations': len(load_rows(ROOT))}
-        except TableNotReady:
-            tables = {'status': 'not_ready'}
-        print(json.dumps({'offline_import_check': 'ok', 'indexes': indexes, 'tables': tables,
-                          'model_options': model_options(),
-                          'telegram_configured': bool(os.getenv('TELEGRAM_BOT_TOKEN')),
-                          'google_configured': bool(os.getenv('GOOGLE_API_KEY'))}, ensure_ascii=False))
+        print(json.dumps({'offline_import_check':'ok','allowlist_configured':bool(ALLOWED_IDS),
+                          'runtime_secret_configured':bool(os.getenv('RAG_SERVICE_SECRET') or os.getenv('RAG_SERVICE_SECRET_FILE'))}))
         return
-    if not os.getenv('TELEGRAM_BOT_TOKEN'):
-        raise SystemExit('Для запуска Telegram заполните TELEGRAM_BOT_TOKEN в .env. Для текстового RAG также нужен GOOGLE_API_KEY.')
-    client = Bot(token=os.environ['TELEGRAM_BOT_TOKEN'])
-    try:
-        await dp.start_polling(client, close_bot_session=False)
-    finally:
-        await worker.close()
-        await client.session.close()
+    token_file=os.getenv('TELEGRAM_BOT_TOKEN_FILE')
+    if token_file:
+        if os.getenv('TELEGRAM_BOT_TOKEN'): raise SystemExit('Задайте только один источник Telegram token.')
+        os.environ['TELEGRAM_BOT_TOKEN']=Path(token_file).read_text().strip()
+    if not os.getenv('TELEGRAM_BOT_TOKEN') or not ALLOWED_IDS:
+        raise SystemExit('Нужны TELEGRAM_BOT_TOKEN и непустой корректный TELEGRAM_ALLOWED_USER_IDS.')
+    state = Path(os.getenv('RAG_STATE_DIR',str(ROOT/'logs')))
+    lockname = '.polling-'+hashlib.sha256(os.environ['TELEGRAM_BOT_TOKEN'].encode()).hexdigest()[:16]+'.lock'
+    with ModelOwnerLock(state,lockname):
+        client = Bot(token=os.environ['TELEGRAM_BOT_TOKEN'])
+        beat = asyncio.create_task(event_loop_heartbeat(state/'bot-heartbeat.json'))
+        try:
+            await dp.start_polling(client, close_bot_session=False)
+        finally:
+            beat.cancel()
+            await asyncio.gather(beat,return_exceptions=True)
+            await worker.close()
+            await client.session.close()
 
 
 if __name__ == '__main__':

@@ -20,7 +20,7 @@ MAX_INPUT_CHARS = 8000
 
 def build_history_chain(retriever, llm, qa_prompt, history_factory, summary_llm=None, history_budget=800,
                         model_name='gemini-2.5-flash', expert_llm=None, privacy_gate=None,
-                        token_counter=None, local_generation=False):
+                        token_counter=None, local_generation=False, retrieval_model='gemini-embedding-001'):
     if os.getenv('RAG_ENV', 'development') == 'production' and privacy_gate is None and not local_generation:
         raise PrivacyDenied('Production pipeline requires an explicit privacy gate')
     if os.getenv('RAG_ENV', 'development') == 'production' and token_counter is None:
@@ -37,7 +37,7 @@ def build_history_chain(retriever, llm, qa_prompt, history_factory, summary_llm=
                                                  'retrieval_mode': inputs.get('mode', 'text')}}
         documents = measure_call(
             retriever.invoke, resolve_query(inputs['input'], inputs['chat_history']), config=retrieval_config,
-            stage='retrieval', model='gemini-embedding-001',
+            stage='retrieval', model=retrieval_model,
             request_id=inputs['_request_id'],
         )
         return select_evidence(documents, inputs.get('mode', 'text'), whole_units=token_counter is not None)

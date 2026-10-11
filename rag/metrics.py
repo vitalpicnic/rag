@@ -50,10 +50,22 @@ def write_event(event, metrics_path=None):
         line = json.dumps(event, ensure_ascii=False, allow_nan=False)
         with _LOCK:
             path.parent.mkdir(parents=True, exist_ok=True)
+            rotate_logs(path)
             with path.open('a', encoding='utf-8') as handle:
                 handle.write(line + '\n')
     except (OSError, TypeError, ValueError):
         _LOG.warning('Unable to write RAG metrics; response processing continues.')
+
+
+def rotate_logs(path):
+    """One cooperating writer per path; active file plus two archives."""
+    path=Path(path).absolute()
+    paths=[path]+[path.with_name(path.name+'.'+str(n)) for n in (1,2)]
+    if any(p.resolve()!=p for p in paths): raise ValueError('Linked metrics destination forbidden')
+    if path.exists() and path.stat().st_size>=10*1024*1024:
+        paths[2].unlink(missing_ok=True)
+        if paths[1].exists(): paths[1].replace(paths[2])
+        path.replace(paths[1])
 
 
 def measure_call(function, *args, stage, model, request_id, metrics_path=None, **kwargs):

@@ -63,5 +63,7 @@ python -m scripts.smoke_embeddings --cache model_cache/e5
 завершает загрузку ошибкой, без скачивания и без обращения к Google. Объект
 embedding повторно используется вызывающим runtime; модель не создаётся на запрос.
 
-Зависимости фиксируют прямые версии. Linux/Python 3.12, hash-locked установка,
-лимиты 8 ГБ и общий model-owner lock ещё требуют проверки этапа deployment/runtime.
+Для Linux/Python 3.12 добавлены hash locks и Compose; установка в image и лимиты
+8 ГБ требуют проверки на VPS. Общий model-owner lock реализован; проверки Windows
+не заменяют Linux flock. Полный smoke E5 → v2 FAISS → runtime → тестовая LLM:
+`python -m scripts.smoke_local --cache model_cache/e5`.

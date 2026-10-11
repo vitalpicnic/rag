@@ -228,6 +228,10 @@ class RuntimeIntegrationTests(unittest.TestCase):
             activate_bundle(self.root,topic,bundle)
 
     def test_real_faiss_packing_pipeline_and_one_model_factory(self):
+        import os,json
+        from unittest.mock import patch
+        metrics=self.root/'metrics.jsonl'
+        self.enterContext(patch.dict(os.environ,{'RAG_METRICS_PATH':str(metrics)}))
         from types import SimpleNamespace
         from langchain_core.messages import AIMessage
         from langchain_core.runnables import RunnableLambda
@@ -251,6 +255,9 @@ class RuntimeIntegrationTests(unittest.TestCase):
             self.assertTrue(runtime.readiness(topic)['ready'])
         factory.assert_called_once()
         self.assertEqual(len(calls),2)
+        records=[json.loads(line) for line in metrics.read_text().splitlines()]
+        self.assertEqual({row['model'] for row in records if row['stage']=='retrieval'},
+                         {self.embedding.profile['model']})
         runtime.query({**REQUEST,'principal':'another-user'})
         self.assertEqual(len(calls[-1]),2)
         runtime.query(REQUEST)

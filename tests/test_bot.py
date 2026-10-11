@@ -37,7 +37,7 @@ class BotTests(unittest.IsolatedAsyncioTestCase):
             mapping.clear()
         bot.store.clear()
         self.allowed = bot.ALLOWED_IDS
-        bot.ALLOWED_IDS = set()
+        bot.ALLOWED_IDS = {1}
         self.chain = Chain()
         bot.user_chains[(10, 1)] = self.chain
         bot.reset_session((10, 1))
@@ -53,6 +53,11 @@ class BotTests(unittest.IsolatedAsyncioTestCase):
         chunks = [call.args[0] for call in msg.answer.call_args_list]
         self.assertEqual(''.join(unescape(c) for c in chunks), '<b>42 & 43</b>' + '😀' * 2500)
         self.assertTrue(all(len(c.encode('utf-16-le')) // 2 <= 4000 for c in chunks))
+
+    async def test_empty_allowlist_denies_generation(self):
+        bot.ALLOWED_IDS = set()
+        await bot.handle_chat(message('question'))
+        self.assertEqual(self.chain.calls, [])
 
     async def test_help_and_mode_selection_make_no_model_call(self):
         await bot.help_message(message('❓ Справка'))

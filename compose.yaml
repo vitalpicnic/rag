@@ -1,0 +1,160 @@
+name: local-rag
+x-common: &common
+  platform: linux/amd64
+  user: '10001:10001'
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ['no-new-privileges:true']
+  tmpfs: ['/tmp:size=256m,mode=1777']
+  pids_limit: 256
+  init: true
+  logging:
+    driver: json-file
+    options: {max-size: '10m', max-file: '3'}
+  networks: [private]
+  restart: unless-stopped
+
+services:
+  runtime:
+    <<: *common
+    image: rag-runtime:local
+    build: {context: ., target: runtime}
+    mem_limit: 3584m
+    cpus: 2.5
+    ports: ['127.0.0.1:8080:8080']
+    stop_grace_period: 190s
+    environment:
+      RAG_ROOT: /srv/rag
+      RAG_BIND: 0.0.0.0
+      RAG_ENV: production
+      RAG_PROFILE: LOCAL
+      RAG_LLM_PROVIDER: ollama
+      RAG_EMBEDDING_PROVIDER: local
+      RAG_EMBEDDING_CACHE: /srv/rag/model_cache/e5
+      RAG_GENERATION_ENABLED: ${RAG_GENERATION_ENABLED:-false}
+      RAG_COUNTER_FACTORY: ${RAG_COUNTER_FACTORY:-}
+      RAG_ADAPTER_SECRETS_FILE: /run/secrets/adapters
+      RAG_SERVICE_SECRET_FILE: /run/secrets/health
+      RAG_RUNTIME_URL: http://127.0.0.1:8080
+      RAG_METRICS_PATH: /srv/rag/logs/metrics.jsonl
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+    secrets: [adapters, health]
+    volumes:
+      - ${RAG_STATE_ROOT:-./state}/data:/srv/rag/data:ro
+      - ${RAG_STATE_ROOT:-./state}/faiss_indexes:/srv/rag/faiss_indexes:ro
+      - ${RAG_STATE_ROOT:-./state}/model_cache:/srv/rag/model_cache:ro
+      - ${RAG_STATE_ROOT:-./state}/prepared_tables:/srv/rag/prepared_tables:ro
+      - ${RAG_STATE_ROOT:-./state}/policies:/srv/rag/policies:ro
+      - ${RAG_STATE_ROOT:-./state}/logs:/srv/rag/logs
+      - ${RAG_STATE_ROOT:-./state}/.model-owner.lock:/srv/rag/.model-owner.lock
+    healthcheck:
+      test: [CMD, python, -m, scripts.healthcheck]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  bot:
+    <<: *common
+    image: rag-adapter:local
+    build: {context: ., target: adapter}
+    profiles: [telegram]
+    command: [python, bot.py]
+    mem_limit: 384m
+    cpus: 0.25
+    environment:
+      RAG_RUNTIME_URL: http://runtime:8080
+      RAG_SERVICE_SECRET_FILE: /run/secrets/tg
+      RAG_STATE_DIR: /state
+      TELEGRAM_BOT_TOKEN_FILE: /run/secrets/telegram
+      TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS:-}
+    secrets: [tg, telegram]
+    volumes: ['${RAG_STATE_ROOT:-./state}/bot:/state']
+    networks: [private, outbound]
+    depends_on: [runtime]
+    healthcheck:
+      test: [CMD, python, -m, scripts.healthcheck, --heartbeat, /state/bot-heartbeat.json]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  web:
+    <<: *common
+    image: rag-adapter:local
+    build: {context: ., target: adapter}
+    profiles: [web]
+    command: [streamlit, run, app.py, --server.address=0.0.0.0, --server.port=8501, --browser.gatherUsageStats=false]
+    mem_limit: 768m
+    cpus: 0.5
+    ports: ['127.0.0.1:8501:8501']
+    environment:
+      RAG_RUNTIME_URL: http://runtime:8080
+      RAG_SERVICE_SECRET_FILE: /run/secrets/web
+      HOME: /tmp
+    secrets: [web]
+    depends_on: [runtime]
+
+  collector:
+    <<: *common
+    image: rag-adapter:local
+    build: {context: ., target: adapter}
+    command: [python, -m, scripts.collect_metrics, --output, /state/operations.jsonl]
+    mem_limit: 128m
+    cpus: 0.25
+    environment:
+      RAG_RUNTIME_URL: http://runtime:8080
+      RAG_SERVICE_SECRET_FILE: /run/secrets/health
+    secrets: [health]
+    volumes: ['${RAG_STATE_ROOT:-./state}/logs:/state']
+
+  indexer:
+    <<: *common
+    image: rag-runtime:local
+    build: {context: ., target: runtime}
+    profiles: [maintenance]
+    restart: 'no'
+    mem_limit: 4608m
+    cpus: 3.0
+    command: [python, -m, scripts.index_admin, --help]
+    volumes: ['${RAG_STATE_ROOT:-./state}:/srv/rag']
+    environment:
+      RAG_PROFILE: LOCAL
+      RAG_LLM_PROVIDER: ollama
+      RAG_EMBEDDING_PROVIDER: local
+      RAG_EMBEDDING_CACHE: /srv/rag/model_cache/e5
+      HF_HUB_OFFLINE: '1'
+
+  model-bootstrap:
+    <<: *common
+    image: rag-runtime:local
+    build: {context: ., target: runtime}
+    profiles: [maintenance]
+    restart: 'no'
+    mem_limit: 1024m
+    cpus: 1.0
+    command: [python, -m, scripts.bootstrap_model, --destination, /model/e5, --revision, 614241f622f53c4eeff9890bdc4f31cfecc418b3]
+    networks: [outbound]
+    volumes: ['${RAG_STATE_ROOT:-./state}/model_cache:/model']
+
+  tools:
+    <<: *common
+    image: rag-runtime:local
+    build: {context: ., target: runtime}
+    profiles: [tools]
+    restart: 'no'
+    mem_limit: 3584m
+    cpus: 2.5
+    command: [python, -m, unittest, discover, -s, tests, -v]
+    environment: {RAG_ENV: development, RAG_METRICS_PATH: /tmp/metrics.jsonl}
+
+secrets:
+  adapters: {file: '${RAG_SECRETS_ROOT:-./deploy/secrets}/adapters.json'}
+  cli: {file: '${RAG_SECRETS_ROOT:-./deploy/secrets}/cli.txt'}
+  web: {file: '${RAG_SECRETS_ROOT:-./deploy/secrets}/web.txt'}
+  tg: {file: '${RAG_SECRETS_ROOT:-./deploy/secrets}/tg.txt'}
+  health: {file: '${RAG_SECRETS_ROOT:-./deploy/secrets}/health.txt'}
+  telegram: {file: '${RAG_SECRETS_ROOT:-./deploy/secrets}/telegram.txt'}
+
+networks:
+  private: {internal: true}
+  outbound: {}

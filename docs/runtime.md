@@ -103,4 +103,6 @@ python -m unittest discover -s tests -p test_runtime.py -q
 
 Не проверены: Linux flock/cgroup, лимиты и latency на VPS, реальная Ollama/Gemini,
 соответствие локального tokenizer конкретному digest модели. Рабочий backend
-счётчика и перенос интерфейсов на HTTP API остаются обязательными до production.
+счётчика остаётся обязательным до production. CLI/TG/web перенесены на
+[внутренний HTTP API](runtime-api.md); конфигурации и границы проверки описаны
+в [инструкции развёртывания](deployment.md).

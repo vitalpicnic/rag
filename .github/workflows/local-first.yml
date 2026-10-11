@@ -1,0 +1,32 @@
+name: Local-first offline stack
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Shell and Compose validation
+        run: |
+          bash -n scripts/bootstrap-vps.sh scripts/backup.sh scripts/restore.sh
+          docker compose --profile web --profile telegram --profile maintenance --profile tools config --quiet
+      - name: Build hash-locked images
+        run: docker compose build runtime web
+      - name: Offline unit tests in the final runtime image
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:size=512m,mode=1777 \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --mount type=bind,src="$PWD/.git",dst=/app/.git,readonly \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/app \
+            -e RAG_METRICS_PATH=/tmp/metrics.jsonl \
+            rag-runtime:local python -m unittest discover -s tests -v
+      - name: Adapter imports without model dependencies
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:size=128m,mode=1777 \
+            rag-adapter:local python bot.py --check

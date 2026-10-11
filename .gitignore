@@ -29,6 +29,10 @@ Thumbs.db
 # Corpus and generated data stay local
 /policies/
 /.model-owner.lock
+/.build_deps/
+/.uv-cache/
+/deploy/secrets/
+/backups/
 /data/*
 !/data/README.md
 /faiss_index/
@@ -46,6 +50,8 @@ Thumbs.db
 *.egg-info/
 build/
 dist/
+/state/
+/deploy/vps.env
 
 # Local environments and editor state
 .venv/

@@ -59,6 +59,14 @@ class RagRuntime:
 
     def submit(self, request):
         request = self._request(request)
+        return self._submit(request)
+
+    def reset_history(self, principal, session, topic):
+        request = self._request({'principal':principal,'session':session,'topic':topic,'mode':'text','question':'reset'})
+        request['_reset'] = True
+        return self._submit(request).result(timeout=self.wait_timeout)
+
+    def _submit(self, request):
         future = Future()
         with self._condition:
             if not self._accepting or len(self._queue) >= 8:
@@ -101,7 +109,11 @@ class RagRuntime:
                 self._active, self._started = True, time.monotonic()
             try:
                 key = tuple(request[k] for k in ('principal','session','topic','mode'))
-                result = self.handler(self.model, request, key)
+                if request.get('_reset'):
+                    self.handler.reset_history(*key[:3])
+                    result = {'reset':True}
+                else:
+                    result = self.handler(self.model, request, key)
             except BaseException:
                 # Do not retain model-bearing traceback frames in client futures.
                 future.set_exception(RuntimeFailure('RAG request failed'))

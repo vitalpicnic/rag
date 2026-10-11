@@ -57,7 +57,9 @@ class SerialWorker:
                     result = await asyncio.to_thread(function)
                 except Exception as exc:
                     if not future.done():
-                        future.set_exception(exc)
+                        # The consumer may clear traceback frames (e.g. unittest).
+                        # Never give it this still-running coroutine's frame.
+                        future.set_exception(exc.with_traceback(None))
                 else:
                     if not future.done():
                         future.set_result(result)

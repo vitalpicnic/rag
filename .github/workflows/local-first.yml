@@ -8,6 +8,9 @@ jobs:
   linux:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    env:
+      RAG_STATE_ROOT: ${{ github.workspace }}/.ci-run/state
+      RAG_SECRETS_ROOT: ${{ github.workspace }}/.ci-run/state/secrets
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,3 +33,33 @@ jobs:
         run: |
           docker run --rm --network none --read-only --tmpfs /tmp:size=128m,mode=1777 \
             rag-adapter:local python bot.py --check
+      - name: Model-free Compose restart and recovery drill
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir .ci-run
+          sudo chown 10001:10001 .ci-run
+          fixture() {
+            docker run --rm --network none --read-only --tmpfs /tmp:size=512m,mode=1777 \
+              --cap-drop ALL --security-opt no-new-privileges \
+              --mount type=bind,src="$PWD/.ci-run",dst=/work \
+              rag-runtime:local python -m "$@"
+          }
+          fixture scripts.deployment_fixture prepare --root /work/state
+          fixture scripts.check_deployment --root /work/state --secrets /work/state/secrets
+          docker compose --profile web up -d --wait --wait-timeout 90 runtime web collector
+          docker compose exec -T runtime python -m scripts.deployment_fixture runtime --root /srv/rag
+          curl --fail --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8501/_stcore/health
+          docker compose restart runtime
+          docker compose up -d --wait --wait-timeout 90 runtime
+          docker compose exec -T runtime python -m scripts.deployment_fixture runtime --root /srv/rag
+          docker compose --profile web stop runtime web collector
+          fixture scripts.backup /work/state /work/backup.tar.gz
+          fixture scripts.restore /work/backup.tar.gz /work/restored
+          fixture scripts.deployment_fixture verify --root /work/restored
+      - name: Container diagnostics and cleanup
+        if: always()
+        run: |
+          docker compose --profile web ps -a
+          docker compose --profile web logs --tail 60
+          docker compose --profile web down --remove-orphans

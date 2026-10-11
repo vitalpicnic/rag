@@ -51,6 +51,22 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await worker.submit(lambda: 'next', timeout=1), 'next')
         await worker.close()
 
+    async def test_result_traceback_does_not_expose_suspended_worker_frame(self):
+        worker=SerialWorker()
+        self.addAsyncCleanup(worker.close)
+        def fail(): raise ValueError('failure')
+        try:
+            await worker.submit(fail,timeout=1)
+        except ValueError as exc:
+            frames=[]
+            trace=exc.__traceback__
+            while trace:
+                frames.append(trace.tb_frame.f_code)
+                trace=trace.tb_next
+            self.assertNotIn(SerialWorker._run.__code__,frames)
+        else: self.fail('Expected job failure')
+        self.assertEqual(await worker.submit(lambda:42,timeout=1),42)
+
 
 if __name__ == '__main__':
     unittest.main()

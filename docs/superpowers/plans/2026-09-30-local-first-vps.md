@@ -425,6 +425,12 @@ shell syntax проверены. Docker Engine недоступен, Linux build
 Общий офлайн suite: 217 PASS, 0 failures/errors/skips; полный smoke с настоящей
 E5 и тестовой LLM прошёл на Windows без сети. Linux image smoke остаётся not_run.
 
+Продолжение 2026-10-11: подтверждён успешный Linux Docker build с hash locks и
+pip check в Actions для `68dfc4e`. Тесты выявили ошибку передачи traceback из
+SerialWorker на Python 3.12; добавлена регрессия и исправление. Добавлены read-only
+preflight и CI-сценарий utility startup/restart/backup/restore без LLM. Статус
+этого сценария фиксируется после запуска Actions, не по наличию YAML.
+
 **Вход:** задача 9; работающий Linux Docker Engine, model download и внешний API.
 **Файлы:** создать Docker/Compose/lock/env файлы из карты выше, `scripts/bootstrap-vps.sh`,
 `scripts/smoke_local.py`, `tests/test_deployment.py`, `.github/workflows/local-first.yml`;

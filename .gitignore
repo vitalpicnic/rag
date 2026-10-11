@@ -51,6 +51,7 @@ Thumbs.db
 build/
 dist/
 /state/
+/.ci-run/
 /deploy/vps.env
 
 # Local environments and editor state

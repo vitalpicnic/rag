@@ -6,6 +6,44 @@ ROOT=Path(__file__).resolve().parents[1]
 
 
 class DeploymentTests(unittest.TestCase):
+    def test_container_fixture_survives_backup_and_detects_changes(self):
+        from scripts.deployment_fixture import prepare,verify
+        from rag.operations import backup,restore
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)/'state'
+            prepare(root)
+            verify(root)
+            with self.assertRaises(FileExistsError): prepare(root)
+            backup(root,Path(tmp)/'backup.tar.gz')
+            restored=Path(tmp)/'restored'
+            restore(Path(tmp)/'backup.tar.gz',restored)
+            verify(restored)
+            self.assertFalse((restored/'secrets').exists())
+            (restored/'data/smoke/a.txt').write_text('changed')
+            with self.assertRaises(ValueError): verify(restored)
+
+    def test_preflight_is_read_only_and_rejects_missing_lock_and_mismatched_secrets(self):
+        import json
+        from scripts.check_deployment import check_state,STATE_DIRECTORIES
+        from scripts.init_secrets import initialize
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            for name in STATE_DIRECTORIES: (root/name).mkdir()
+            (root/'.model-owner.lock').touch()
+            (root/'policies/external.json').write_text(json.dumps({'schema_version':1,'topics':{}}))
+            initialize(root/'secrets')
+            before={p.relative_to(root):p.read_bytes() for p in root.rglob('*') if p.is_file()}
+            report=check_state(root,root/'secrets')
+            self.assertEqual(report['status'],'passed')
+            self.assertFalse(report['generation_verified'])
+            self.assertEqual(before,{p.relative_to(root):p.read_bytes() for p in root.rglob('*') if p.is_file()})
+            (root/'.model-owner.lock').unlink()
+            (root/'secrets/cli.txt').write_text('different')
+            report=check_state(root,root/'secrets')
+            self.assertFalse(report['checks']['owner_lock'])
+            self.assertFalse(report['checks']['adapter_secrets'])
+            self.assertNotIn('different',json.dumps(report))
+
     def test_local_smoke_uses_real_faiss_and_synthetic_generation(self):
         from scripts.smoke_local import smoke
         from rag.embeddings import local_profile

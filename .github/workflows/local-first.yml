@@ -47,9 +47,11 @@ jobs:
           }
           fixture scripts.deployment_fixture prepare --root /work/state
           fixture scripts.check_deployment --root /work/state --secrets /work/state/secrets
-          docker compose --profile web up -d --wait --wait-timeout 90 runtime web collector
+          docker compose run --rm --no-deps gateway -t
+          docker compose --profile web up -d --wait --wait-timeout 90 runtime web collector gateway
           docker compose exec -T runtime python -m scripts.deployment_fixture runtime --root /srv/rag
           curl --fail --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8501/_stcore/health
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' -H 'X-RAG-Principal: probe' http://127.0.0.1:8080/health/live)" = 401
           docker compose restart runtime
           docker compose up -d --wait --wait-timeout 90 runtime
           docker compose exec -T runtime python -m scripts.deployment_fixture runtime --root /srv/rag

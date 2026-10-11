@@ -11,12 +11,14 @@ import tempfile
 import time
 
 from rag.resources import ModelOwnerLock
+from rag.paths import unlinked_path
 
 DIRECTORIES = ('data','faiss_indexes','prepared_tables','policies')
 
 
 def resource_snapshot(root):
     """Own-process/container counters. Missing platform metrics remain unavailable."""
+    root=unlinked_path(root)
     result={'timestamp':time.time(),'rss_bytes':None,'rss_peak_bytes':None,
             'cgroup_memory_bytes':None,'cgroup_peak_bytes':None,'cpu_steal_ticks':None,'cpu_stat':None}
     try:
@@ -78,7 +80,7 @@ def verify_restored(root):
 
 
 def backup(root, archive):
-    root,archive=Path(root).resolve(),Path(archive).absolute()
+    root,archive=unlinked_path(root),unlinked_path(archive)
     if archive.exists(): raise FileExistsError(archive)
     if any(archive.is_relative_to(root/name) for name in DIRECTORIES):
         raise ValueError('Backup destination must be outside the archived directories')
@@ -114,9 +116,8 @@ def backup(root, archive):
 
 
 def restore(archive, destination):
-    destination=Path(destination).absolute()
+    destination=unlinked_path(destination)
     if destination.exists(): raise FileExistsError(destination)
-    if destination.parent.resolve()!=destination.parent: raise ValueError('Linked restore parent forbidden')
     destination.parent.mkdir(parents=True,exist_ok=True)
     with tarfile.open(archive,'r:gz') as source:
         members=source.getmembers()

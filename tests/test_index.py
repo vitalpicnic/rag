@@ -32,7 +32,7 @@ class IndexTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
+        self.root = Path(self.tmp.name).resolve()
         self.data = self.root / 'data' / 'topic'
         self.data.mkdir(parents=True)
         (self.data / 'a.txt').write_text('alpha information', encoding='utf-8')
@@ -183,7 +183,7 @@ class IndexTests(unittest.TestCase):
     def test_index_can_be_moved_with_corpus_to_another_root(self):
         self.build()
         with tempfile.TemporaryDirectory() as other:
-            target = Path(other)
+            target = Path(other).resolve()
             shutil.copytree(self.root / 'data', target / 'data')
             shutil.copytree(self.root / 'faiss_indexes', target / 'faiss_indexes')
             index = load_index(target, 'topic', self.embeddings, self.settings)

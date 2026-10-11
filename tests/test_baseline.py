@@ -13,7 +13,7 @@ class BaselineTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.corpus = self.root / 'data'
         self.corpus.mkdir()
         (self.corpus / 'example.txt').write_text('unchanged evidence', encoding='utf-8')

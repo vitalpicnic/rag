@@ -7,6 +7,7 @@ import time
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
+from rag.paths import unlinked_path
 
 _LOCK = threading.Lock()
 _LOG = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ def extract_usage(response):
 def write_event(event, metrics_path=None):
     """A metrics disk failure must not turn a successful paid call into an error."""
     try:
-        path = Path(metrics_path or os.getenv('RAG_METRICS_PATH') or _DEFAULT_PATH)
+        path = unlinked_path(metrics_path or os.getenv('RAG_METRICS_PATH') or _DEFAULT_PATH)
         line = json.dumps(event, ensure_ascii=False, allow_nan=False)
         with _LOCK:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -59,9 +60,9 @@ def write_event(event, metrics_path=None):
 
 def rotate_logs(path):
     """One cooperating writer per path; active file plus two archives."""
-    path=Path(path).absolute()
+    path=unlinked_path(path)
     paths=[path]+[path.with_name(path.name+'.'+str(n)) for n in (1,2)]
-    if any(p.resolve()!=p for p in paths): raise ValueError('Linked metrics destination forbidden')
+    for candidate in paths: unlinked_path(candidate)
     if path.exists() and path.stat().st_size>=10*1024*1024:
         paths[2].unlink(missing_ok=True)
         if paths[1].exists(): paths[1].replace(paths[2])

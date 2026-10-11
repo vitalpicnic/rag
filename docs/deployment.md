@@ -27,6 +27,7 @@ Ubuntu 24.04, amd64, **4 vCPU, 8 ГБ RAM, SSD от 80 ГБ**, не менее 2
 | bot, опционально | 384 MiB | 0.25 |
 | web, опционально | 768 MiB | 0.5 |
 | collector | 128 MiB | 0.25 |
+| gateway, Nginx | 64 MiB | 0.1 |
 | indexer, вместо runtime | 4608 MiB | 3 |
 
 Остаток предназначен ОС и Docker. Эти лимиты заданы в Compose; достаточность
@@ -81,7 +82,12 @@ sudo docker compose --env-file deploy/vps.env exec runtime python -m scripts.hea
 
 ## Доступ, секреты и интерфейсы
 
-8080 и 8501 опубликованы только на loopback. Для веб-интерфейса:
+8080 и 8501 опубликованы только на loopback через отдельный gateway. Runtime и web
+остаются только во внутренней сети без прямого выхода в интернет. Gateway связан
+с внутренней и входной bridge-сетями, проксирует только фиксированные runtime/web,
+не получает volumes корпуса или secrets. Его образ закреплён digest; URI с
+download/export токенами не журналируются. При выключенном профиле web порт 8501
+возвращает ошибку upstream, не открывает другой сервис. Для веб-интерфейса:
 
 ```bash
 ssh -N -L 8501:127.0.0.1:8501 operator@vps
@@ -221,3 +227,5 @@ CPU extra-index из `.in` и `--index-strategy unsafe-best-match` только 
 [Compose secrets](https://docs.docker.com/compose/how-tos/use-secrets/),
 [pip secure installs](https://pip.pypa.io/en/stable/topics/secure-installs/),
 [uv resolution](https://docs.astral.sh/uv/concepts/resolution/).
+Конфигурация входа: [Docker port publishing](https://docs.docker.com/engine/network/port-publishing/)
+и [Nginx WebSocket proxying](https://nginx.org/en/docs/http/websocket.html).

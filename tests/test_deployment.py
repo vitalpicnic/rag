@@ -71,6 +71,11 @@ class DeploymentTests(unittest.TestCase):
         services=config['services']
         self.assertEqual(services['runtime']['mem_limit'],'3584m')
         self.assertEqual(services['indexer']['mem_limit'],'4608m')
+        self.assertEqual(services['runtime']['networks'],['private'])
+        self.assertNotIn('ports',services['runtime'])
+        self.assertNotIn('ports',services['web'])
+        self.assertEqual(set(services['gateway']['networks']),{'private','edge'})
+        self.assertIn('@sha256:',services['gateway']['image'])
         for service in services.values():
             self.assertTrue(service['read_only'])
             self.assertEqual(service['user'],'10001:10001')

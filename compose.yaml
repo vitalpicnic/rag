@@ -21,7 +21,6 @@ services:
     build: {context: ., target: runtime}
     mem_limit: 3584m
     cpus: 2.5
-    ports: ['127.0.0.1:8080:8080']
     stop_grace_period: 190s
     environment:
       RAG_ROOT: /srv/rag
@@ -86,13 +85,29 @@ services:
     command: [streamlit, run, app.py, --server.address=0.0.0.0, --server.port=8501, --browser.gatherUsageStats=false]
     mem_limit: 768m
     cpus: 0.5
-    ports: ['127.0.0.1:8501:8501']
     environment:
       RAG_RUNTIME_URL: http://runtime:8080
       RAG_SERVICE_SECRET_FILE: /run/secrets/web
       HOME: /tmp
     secrets: [web]
     depends_on: [runtime]
+
+  gateway:
+    <<: *common
+    image: nginx:stable-alpine@sha256:8f84ed99befc3891b8f329c5c202785278a2cfb7c25107d57fb2a134a3117433
+    entrypoint: [nginx]
+    command: ['-g', 'daemon off;']
+    mem_limit: 64m
+    cpus: 0.1
+    networks: [private, edge]
+    ports: ['127.0.0.1:8080:8080', '127.0.0.1:8501:8501']
+    volumes: ['./deploy/nginx.conf:/etc/nginx/nginx.conf:ro']
+    depends_on: [runtime]
+    healthcheck:
+      test: [CMD-SHELL, 'wget -q -O /dev/null http://127.0.0.1:8080/gateway-health']
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   collector:
     <<: *common
@@ -157,4 +172,5 @@ secrets:
 
 networks:
   private: {internal: true}
+  edge: {}
   outbound: {}

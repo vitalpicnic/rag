@@ -4,19 +4,23 @@ import json
 import os
 from pathlib import Path
 from rag.privacy import PolicyStore
+from rag.paths import unlinked_path
 
 STATE_DIRECTORIES=('data','faiss_indexes','prepared_tables','prepared_corpora','model_cache','policies','logs','bot')
 
 
 def _read(path,limit):
-    if path.resolve()!=path.absolute() or not path.is_file(): raise ValueError('Unsafe state file')
+    path=unlinked_path(path)
+    if not path.is_file(): raise ValueError('Unsafe state file')
     with path.open('rb') as stream: data=stream.read(limit+1)
     if len(data)>limit: raise ValueError('Oversized configuration')
     return data.decode('utf-8')
 
 
 def check_state(root,secrets_root):
-    root,secrets_root=Path(root).absolute(),Path(secrets_root).absolute()
+    try: root,secrets_root=unlinked_path(root),unlinked_path(secrets_root)
+    except (OSError,ValueError):
+        return {'status':'failed','checks':{'unlinked_roots':False},'generation_verified':False,'network_calls':0}
     checks={'state_directories':root.resolve()==root and all(
         (root/name).is_dir() and (root/name).resolve()==root/name for name in STATE_DIRECTORIES)}
     lock=root/'.model-owner.lock'

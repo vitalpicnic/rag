@@ -10,11 +10,11 @@ from threading import Event
 import time
 from rag.runtime_client import RuntimeClient
 from rag.metrics import rotate_logs
+from rag.paths import unlinked_path
 
 
 def append_event(path,event):
-    path=Path(path).absolute()
-    if path.resolve()!=path: raise ValueError('Linked metrics destination forbidden')
+    path=unlinked_path(path)
     path.parent.mkdir(parents=True,exist_ok=True)
     rotate_logs(path)
     with path.open('a',encoding='utf-8') as output: output.write(json.dumps(event,allow_nan=False)+'\n')

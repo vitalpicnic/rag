@@ -4,11 +4,11 @@ import json
 import os
 from pathlib import Path
 import secrets
+from rag.paths import unlinked_path
 
 
 def initialize(destination):
-    destination = Path(destination).absolute()
-    if destination.resolve()!=destination: raise ValueError('Linked secrets directory forbidden')
+    destination = unlinked_path(destination)
     destination.mkdir(parents=True,exist_ok=True,mode=0o700)
     os.chmod(destination,0o700)
     names = ('cli','web','tg','health')

@@ -1,13 +1,18 @@
 # Развёртывание Local-first RAG
 
-Статус 2026-10-11: Linux image build и hash-locked установка с `pip check` прошли
-в GitHub Actions на коммите `68dfc4e`. Последующий suite выявил ошибку очереди
-на Python 3.12; исправление и новый restart/recovery drill проверяются отдельно.
+Статус 2026-10-11: на коммите `7a5c883` прошёл полный
+[Linux CI](https://github.com/vitalpicnic/rag/actions/runs/38159985671):
+сборка image, hash-locked установка с `pip check`, офлайн-тесты в image,
+проверка Nginx, Compose startup, доступ к web через loopback, отказ API без
+авторизации, restart runtime и backup/restore с проверкой хешей FAISS/SQLite.
+[Windows/Ubuntu CI](https://github.com/vitalpicnic/rag/actions/runs/38159985795)
+также прошёл. В каждом удалённом suite: 223 теста, 221 PASS и 2 ожидаемых пропуска
+из-за банковского PDF, не распространяемого с репозиторием; failures/errors — 0.
 Повторный bootstrap на VPS, реальная генерация и нагрузочная приёмка ещё не выполнены.
 На машине разработки Docker Engine недоступен, Ubuntu WSL
 не запускается из-за отсутствующего VHDX. Валидный Compose не означает принятую систему.
 
-Локальная проверка: **220 unittest tests, 0 failures/errors/skips** (Windows,
+Локальная проверка: **223 unittest tests, 0 failures/errors/skips** (Windows,
 Python 3.14), Compose all-profiles config и `bash -n` — PASS. Целевой Python 3.12
 зафиксирован для Linux image; локальная версия не подменяет проверку этого image.
 Отдельный HTTP-процесс без генерации и полный `scripts.smoke_local` с настоящей
@@ -202,10 +207,10 @@ CLI окружении. Команда делает по 30 попыток дл�
 
 Перед production обязательны: Linux build и `pip check`, офлайн тесты в image,
 реальные E5/retrieval, проверенный tokenizer и LLM, restart/restore, проверка RAM,
-latency и качества на выбранном VPS. CI содержит build/offline suite, но его
-конфигурация не является свидетельством уже успешного запуска.
+latency и качества на выбранном VPS. Сборка, офлайн-тесты и utility restart/restore
+подтверждены указанным выше CI; приёмка с настоящей моделью на целевом VPS остаётся открытой.
 
-CI дополнительно проверяет Compose runtime/web/collector, повторный запуск runtime
+CI дополнительно проверяет Compose runtime/web/collector/gateway, повторный запуск runtime
 с неизменными хешами файлов, отказ генерации в utility-режиме, backup и restore
 в новый root. `scripts.deployment_fixture` предназначен только для этой проверки:
 создаёт новый каталог с синтетическими векторами и настоящими FAISS/SQLite,
@@ -216,7 +221,8 @@ CI дополнительно проверяет Compose runtime/web/collector, 
 
 Python 3.12 amd64 image закреплён digest; apt использует Debian snapshot.
 Linux lockfiles содержат транзитивные версии и hashes, CPU torch. Они разрешены
-для Python 3.12/x86_64-manylinux_2_28 с uv 0.11.7; установка на Linux ещё не проверена.
+для Python 3.12/x86_64-manylinux_2_28 с uv 0.11.7; установка на Linux и `pip check`
+прошли при сборке image в GitHub Actions.
 Для обновления пересоздайте lock из `.in` через `uv pip compile --python-version 3.12
 --python-platform x86_64-manylinux_2_28 --generate-hashes`, runtime использует
 CPU extra-index из `.in` и `--index-strategy unsafe-best-match` только при resolution;

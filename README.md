@@ -44,7 +44,9 @@
 Статус на 2026-10-10: в `feat/local-first-vps` реализованы общий runtime и HTTP
 адаптеры CLI/TG/web, безопасная выдача источников/PPTX, Compose, backup/restore
 и отдельный эксперимент BM25/RRF. Офлайн-проверки не заменяют production-приёмку:
-Linux image build, реальная Ollama/Gemini, tokenizer mapping и нагрузка ещё требуют проверки.
+Linux image build, `pip check`, офлайн-тесты и Compose restart/restore прошли в
+[CI](https://github.com/vitalpicnic/rag/actions/runs/38159985671) без LLM.
+Реальная Ollama/Gemini, tokenizer mapping и нагрузка ещё требуют проверки.
 По умолчанию сервис запускается без генерации с readiness=false.
 
 - [Развёртывание и эксплуатация](docs/deployment.md)

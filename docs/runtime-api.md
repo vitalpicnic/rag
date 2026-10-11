@@ -3,6 +3,8 @@
 CLI, Telegram и Streamlit используют `rag.runtime_client.RuntimeClient`.
 Только runtime загружает модели/FAISS. API слушает закрытый HTTP endpoint,
 по умолчанию loopback:8080; Compose предоставляет private network.
+В Compose доступ с хоста проходит через gateway на `127.0.0.1:8080`;
+runtime остаётся только во внутренней сети. Web использует тот же gateway на порту 8501.
 
 Каждый запрос содержит `Authorization: Bearer <service secret>` и
 `X-RAG-Principal`. Секрет определяет namespace адаптера; principal добавляет

@@ -431,6 +431,18 @@ SerialWorker на Python 3.12; добавлена регрессия и испр
 preflight и CI-сценарий utility startup/restart/backup/restore без LLM. Статус
 этого сценария фиксируется после запуска Actions, не по наличию YAML.
 
+Результат 2026-10-11, `7a5c883`: [Linux CI](https://github.com/vitalpicnic/rag/actions/runs/38159985671)
+PASS — build/pip check, suite в read-only image без сети, preflight, nginx -t,
+Compose startup, loopback web/API authentication, runtime restart, backup/restore
+в новый root с неизменными хешами и проверкой настоящих FAISS/SQLite.
+[Windows/Ubuntu CI](https://github.com/vitalpicnic/rag/actions/runs/38159985795) PASS.
+Каждый удалённый suite: 223 run, 221 PASS, 2 пропуска необязательного приватного PDF;
+локально 223 PASS без пропусков. Исправлены traceback очереди Python 3.12,
+канонизация Windows 8.3 без разрешения symlink/junction и публикация через gateway
+при сохранении internal-only runtime/web. Nginx использует tmpfs для всех temp paths.
+Эта проверка использует синтетические векторы и отключённую генерацию: реальная
+LLM, точный tokenizer mapping, host bootstrap и нагрузка на 8 ГБ VPS не проверены.
+
 **Вход:** задача 9; работающий Linux Docker Engine, model download и внешний API.
 **Файлы:** создать Docker/Compose/lock/env файлы из карты выше, `scripts/bootstrap-vps.sh`,
 `scripts/smoke_local.py`, `tests/test_deployment.py`, `.github/workflows/local-first.yml`;
@@ -472,7 +484,8 @@ CLOUD остаётся доступным, HYBRID не объявляется г
 staging, SQLite integrity и настоящим FAISS retrieval smoke, метрики ресурсов,
 ротация журналов, сводки стадий/usage и нагрузочный CLI без текстов в отчёте.
 Офлайн tests проверяют повреждения, небезопасные архивы и новый root.
-Linux recovery/restart drill, off-host transfer, 8 GB latency/RAM/quality — not_run.
+Linux utility recovery/restart drill подтверждён CI 2026-10-11 (см. задачу 10).
+Off-host transfer, 8 GB latency/RAM/quality — not_run.
 Retention выполняет оператор по runbook; автоматическое удаление не включено.
 
 **Вход:** принятый HYBRID; задан закрытый off-host backup destination.
